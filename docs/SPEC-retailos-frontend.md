@@ -8,12 +8,12 @@ Everything below is derived from the SDK as it is in the NanoApps fork on 2026-0
 
 ## Scope
 
-- `retailos/tinygb.c`: `hb_raw_init`, `hb_raw_frame`, the mode machine (library, playing, paused menu, settings).
+- `tinygb.c` (repository root, because the root is the NanoApps app directory): `hb_raw_init`, `hb_raw_frame`, the mode machine (library, playing, paused menu, settings).
 - `platform/tg_input_hb.c`: buttons, multitouch pad, accelerometer into one held byte.
 - `platform/tg_fs_hb.c`: `tg_save.h` and `tg_roms.h` over `hb_fs`.
 - `platform/tg_sys_hb.c`: wake-lock poke, `abort` stub, the `time.h` shim the vendored core needs.
 - `platform/tg_text.c`, `ui/tg_menu_raw.c`: text and menus without LVGL.
-- `retailos/Makefile`, `retailos/Info.plist`.
+- `Makefile`, `Info.plist` (repository root).
 - Audio is its own spec: `SPEC-retailos-audio.md`.
 
 ## Non-Goals
@@ -36,7 +36,7 @@ Everything below is derived from the SDK as it is in the NanoApps fork on 2026-0
 
 ### Surface and picture
 
-- **REQ-ROS-001**: The app shall be built with `RAW_SURFACE := 1` and shall define exactly `hb_raw_init(int w, int h)` and `hb_raw_frame(const hb_spoint_t *touch)`. It shall not use `HB_APP_ENTRY` (that emits a second `payload_entry`) and shall not define `hb_app_main` (no such entry exists; the current stub does this and cannot link).
+- **REQ-ROS-001**: The app shall be built with `RAW_SURFACE := 1` and shall define exactly `hb_raw_init(int w, int h)` and `hb_raw_frame(const hb_spoint_t *touch)`. It shall not use `HB_APP_ENTRY` (that emits a second `payload_entry`) and shall not define `hb_app_main` (no such entry exists; the stub before Phase 1 did this and could not link).
 - **REQ-ROS-002**: The surface is 240 x 432 XRGB8888 with stride equal to width. Every pixel the app writes shall carry `0xFF` in the top byte. The scaler's palette tables shall be built with that byte set so its averaging preserves it.
 - **REQ-ROS-003**: The picture shall be 240 x 216 at y = 0 (the same `tg_scale_15` output and the same layout as N31); the pad shall occupy y = 216..431 with the geometry in `tg_pad.c`, plus one additional "menu" pill.
 - **REQ-ROS-004**: The framebuffer persists between ticks and between apps. `hb_raw_init` shall paint the whole surface before the first tick returns, and the scaler's row skipping shall stay enabled because the picture region is written by nothing else while playing.
@@ -63,7 +63,8 @@ Everything below is derived from the SDK as it is in the NanoApps fork on 2026-0
 
 - **REQ-ROS-030**: The raw surface has no text rendering. The app shall carry its own fixed 6 x 8 ASCII (32..126) bitmap font in `platform/tg_text.c`, drawing into any XRGB surface with a stride, at 1x or 2x, portable and unit-tested on the host.
 - **REQ-ROS-031**: `ui/tg_menu_raw.c` shall implement the same `tg_menu.h` interface and the same pages and rows as the LVGL menu (Library; Pause: Resume, Save state, Load state, Restart cartridge, Settings, Choose another game; Settings: Palette, Scaling, Tilt d-pad; Palette list), plus an About row showing the build stamp. "Quit TinyGB" is omitted: Home is the way out on RetailOS.
-- **REQ-ROS-032**: Menu input shall be touch first: tap a row to choose it, drag to scroll, a "Back" row or pill at the bottom. Vol Up / Vol Down shall move the selection as well, and the selected row shall be visibly highlighted so button-only navigation works.
+- **REQ-ROS-032**: The menu shall look and behave like the nano's own settings screens and the NanoApps LVGL apps, not like a game menu: a 44 px title bar with a back chevron on the left and the page title centred; full-width 48 px rows with 1 px separators, a right-hand chevron on rows that open a page, a check mark on the chosen entry of a list (palette), and an on/off pill on toggles (scaling, tilt); colours from the NanoApps theme (`hb_color_bg/surface/text/text_dim/primary`, `hb_tint_color`), which follow the device colour and the light/dark setting and are available on the raw path.
+- **REQ-ROS-035**: Menu input shall be touch first and shall match the platform's gestures: tap a row to choose it (highlight on press, act on release inside the same row, cancel if the finger leaves it); drag vertically to scroll, content following the finger with no dead zone larger than 8 px; swipe right starting within 24 px of the left edge, or tap the back chevron, to go back. Vol Up / Vol Down shall also move a visible selection so the menu is usable without touch; there is no keyboard "select" on RetailOS other than a tap.
 - **REQ-ROS-033**: The in-game menu shall open from a "menu" pill in the pad area (there is no interceptable Home). Opening it shall flush the battery save and shall pause audio (see the audio spec); closing it shall invalidate the scaler and pad so both repaint fully.
 - **REQ-ROS-034**: The menu shall run inside `hb_raw_frame` as a mode, never as a loop that does not return: the OS draws only when the tick returns.
 
@@ -89,11 +90,11 @@ Everything below is derived from the SDK as it is in the NanoApps fork on 2026-0
 
 ### Build and packaging
 
-- **REQ-ROS-070**: `retailos/Makefile` shall set `APP_NAME := tinygb`, list the core, portable, RetailOS platform and UI sources by relative path, set `RAW_SURFACE := 1`, set `EXTRA_CFLAGS` before the include (it is consumed by a `:=` inside `hb_app.mk`), and `include $(NANOAPPS)/sdk/hb_app.mk`.
-- **REQ-ROS-071**: `EXTRA_CFLAGS` shall carry `-DAUDIO_SAMPLE_RATE=22050 -DMINIGB_APU_AUDIO_FORMAT_S16SYS=1`, the vendor warning suppressions, `-I` for the `time.h` shim, and `-O2` (the SDK default is `-Os`; a later flag wins). Whether to also pass `-mfpu=vfpv4` in place of the SDK's `neon` (the part has no NEON) is decided by measurement in Phase 3 and recorded in `OPEN-QUESTIONS.md` OQ-008.
-- **REQ-ROS-072**: The build shall print the `.hbapp` size and fail if it exceeds 512 KiB, leaving 64 KiB of headroom under the resident's 576 KiB staging slot, which truncates silently.
+- **REQ-ROS-070**: The repository root shall itself be a valid NanoApps app directory: `Makefile` (sets `APP_NAME := tinygb`, lists the core, portable, RetailOS platform and UI sources by relative path, sets `RAW_SURFACE := 1`, sets `EXTRA_CFLAGS` before the include because a `:=` inside `hb_app.mk` consumes it, and includes `$(NANOAPPS)/sdk/hb_app.mk` with `NANOAPPS ?= ../..`), `Info.plist`, and `tinygb.c`. This is what lets NanoApps carry the repository as `apps/tinygb` (a git subtree) and build it with no other checkout.
+- **REQ-ROS-071**: `EXTRA_CFLAGS` shall carry `-O2`, `-DAUDIO_SAMPLE_RATE=22050 -DMINIGB_APU_AUDIO_FORMAT_S16SYS=1`, the vendor warning suppressions, and `-I` for the `time.h` shim. `-O2` takes effect (a later `-O` wins). The arch flags `-mcpu=cortex-a5 -mfpu=vfpv4` (OQ-008, decided) are stated there too but are inert until `hb_app.mk` stops restating `-mcpu=cortex-a8 -mfpu=neon` in its link flags after `EXTRA_CFLAGS`; the plan carries a small `hb_app.mk` change (an `HB_ARCH_FLAGS` variable) for the NanoApps fork and upstream.
+- **REQ-ROS-072**: `make check-size` shall print the `.hbapp` size and fail if it exceeds 512 KiB, leaving 64 KiB of headroom under the resident's 576 KiB staging slot, which truncates silently. (Phase 1: the stub is 676 bytes.)
 - **REQ-ROS-073**: `Info.plist` shall declare `CFBundleIdentifier org.nanoapps.tinygb`, `CFBundleName TinyGB`, `HBAppKind 1`, a Game Boy-ish glyph (`gamepad`) and the green accent `#7bab3a` used by the N31 menu, replacing the scaffolder's paintbrush and purple.
-- **REQ-ROS-074**: The NanoApps fork shall keep a forwarder at `apps/tinygb/` (Makefile, Info.plist, README) so `./start build tinygb` and `./start install tinygb` work unchanged; the forwarder builds this repository and copies the `.hbapp` into `apps/tinygb/build/`. See `RETAILOS-INTEGRATION.md`.
+- **REQ-ROS-074**: NanoApps (the fork first, upstream when submitted) shall carry this repository as `apps/tinygb` via `git subtree` (`git subtree add --prefix=apps/tinygb https://github.com/andrew867/tinygb main --squash`, refreshed with `git subtree pull`), so `./start build tinygb`, `./start install tinygb`, and `make -C apps` work unchanged for anyone who clones NanoApps. Changes flow from this repository to NanoApps; a fix made inside NanoApps is pushed back with `git subtree push`. See `RETAILOS-INTEGRATION.md`.
 
 ## State and Data
 

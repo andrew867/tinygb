@@ -12,8 +12,8 @@ TinyGB puts a Game Boy on the nano's 240 x 432 screen at exactly one-and-a-half 
 |---|---|
 | Core, scaler, audio clock, tilt, save logic | done; unit tests and the Blargg / dmg-acid2 gate pass |
 | N31 Linux front end | done and playable: DRM or fbdev picture, alsa-lib sound, keys + tilt + touch, LVGL menu, saves, states |
-| RetailOS (NanoApps) front end | not started; an empty stub. This is the work this repository exists to finish |
-| This repository | history extracted from the NanoApps fork; documentation written; no GitHub remote yet |
+| RetailOS (NanoApps) front end | a linkable placeholder (paints the screen, does nothing). This is the work this repository exists to finish |
+| This repository | extracted from the NanoApps fork with history; documented; host tests, the gate, vendor and seam checks, and the RetailOS build run in CI (Phase 1 done) |
 
 ## Who this is for
 
@@ -33,14 +33,17 @@ People with a nano 7G who run NanoApps or N31, and the maintainer. It ships no c
 
 ## Build
 
+This repository is itself a NanoApps app directory. NanoApps carries it as `apps/tinygb` (a git subtree), so from a NanoApps checkout `./start build tinygb` and `./start install tinygb` just work. Standalone:
+
 ```sh
-make test            # host unit tests (seconds)
-make gate            # fetches Blargg + dmg-acid2, runs the core gate
-make n31             # static ARM binary, needs IPOD_ROOT (see docs/N31-INTEGRATION.md)
-make retailos        # .hbapp, needs a NanoApps checkout (see docs/RETAILOS-INTEGRATION.md)
+make test                      # host unit tests (seconds)
+make gate                      # fetches Blargg + dmg-acid2, runs the core gate
+make check-seam check-vendor   # no Peanut-GB symbol outside the core; vendor/ unmodified
+make NANOAPPS=../NanoApps      # the RetailOS .hbapp, then `make check-size`
+make n31                       # static ARM binary, needs IPOD_ROOT (see docs/N31-INTEGRATION.md)
 ```
 
-Until Phase 1 of the plan lands, the equivalent commands are `make -C host -f Makefile.host test|gate` and `make -C host -f Makefile.n31`.
+Linux or WSL. `make test`/`gate` need gcc and python3 with Pillow; the RetailOS build needs `arm-none-eabi-gcc`, python3 `pyelftools`, and a NanoApps tree; the N31 build needs the toolchain and libraries described in `docs/N31-INTEGRATION.md`.
 
 ## Document map
 
@@ -65,10 +68,9 @@ Until Phase 1 of the plan lands, the equivalent commands are `make -C host -f Ma
 
 ## Current build priorities
 
-1. Create the GitHub repository and push (needs the owner's go-ahead).
-2. Phase 1: top-level Makefile, CI, licences, the two missing host tests.
-3. Phase 2: N31 built from here; re-point the ipod tree's scripts.
-4. Phases 3 to 5: the RetailOS front end, picture then sound then menu and saves.
+1. Phase 2: N31 built from here (vendored launcher shims); re-point the ipod tree's scripts; put the subtree into the NanoApps fork.
+2. Phases 3 to 5: the RetailOS front end. On-screen touch controls and a menu that behaves like the nano's own screens are the bar; picture first, then sound, then menu, saves, and settings.
+3. Upstream: submit `apps/tinygb` to nfzerox/NanoApps once v0.1 is playable.
 
 ## Known gaps
 

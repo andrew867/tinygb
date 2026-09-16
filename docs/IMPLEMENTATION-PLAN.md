@@ -12,8 +12,9 @@
 ## Repository structure (target)
 
 ```
-tinygb/
-  README.md  LICENSE  CHANGELOG.md  Makefile  .gitignore
+tinygb/                        <- also a NanoApps app directory: NanoApps carries it as apps/tinygb (git subtree)
+  Makefile  Info.plist  tinygb.c        the RetailOS app (hb_app.mk shape) + test/gate/n31/check-* targets
+  README.md  LICENSE  CHANGELOG.md  .gitignore  .gitattributes
   .github/workflows/ci.yml
   core/          tg_core.h  tg_core.c  tg_peanut.c
   vendor/        peanut_gb.h  minigb_apu.c  minigb_apu.h  LICENSES.md
@@ -24,43 +25,40 @@ tinygb/
                  tg_audio_hb.c  tg_input_hb.c  tg_fs_hb.c  tg_sys_hb.c   (RetailOS)
                  retailos/include/time.h        (struct tm shim for the vendored core)
   ui/            tg_menu.h  tg_menu.c (LVGL, n31)  tg_menu_raw.c (RetailOS)
-  linux/         tg_linux.c  Makefile.n31  lv_conf_n31.h
+  linux/         tg_linux.c
   linux/shim/    drmfb.c/h  fbcon.c/h  touch.c/h  fbrefresh.h  build_stamp.c/h  lvgl-mirror.mk  PROVENANCE
-  retailos/      tinygb.c  Info.plist  Makefile
-  host/          tg_headless.c  tests.c  Makefile.host
+  host/          tg_headless.c  tests.c  Makefile.host  Makefile.n31  lv_conf_n31.h
   tools/         fetch-testroms.sh  gate.sh  acid2check.py  grab-screen.sh  sync-n31-shims.sh
   docs/          this set
   testroms/      fetched, ignored
 ```
 
-Kept as-is from the extracted tree: `core/`, `vendor/`, `platform/` (flat, suffix convention `_linux` / `_alsalib` / `_hb`), `ui/`, `linux/`, `host/`, `tools/`. New: `retailos/`, `linux/shim/`, `docs/`, the top-level `Makefile`, CI. The existing root `Makefile`, `Info.plist`, and `tinygb.c` move into `retailos/` (they are the RetailOS app's files and nothing else).
+Kept as-is from the extracted tree: `core/`, `vendor/`, `platform/` (flat, suffix convention `_linux` / `_alsalib` / `_hb`), `ui/`, `linux/`, `host/` (including `Makefile.n31`, which stays where the ipod scripts expect it), `tools/`, and the three RetailOS app files at the root. New: `linux/shim/`, `docs/`, the top-level `Makefile`'s extra targets, CI. Nothing moves directories; the root staying an app directory is what makes the subtree model work (OQ-014).
 
-## Phase 0: Extraction (done locally 2026-09-16)
+## Phase 0: Extraction (done 2026-09-16)
 
 **Goal**: a standalone git repository holding only TinyGB's history.
 
-Done: `git clone --no-local NanoApps tinygb; git filter-repo --path apps/tinygb --path-rename apps/tinygb/:`. Result: 18 commits, 43 files, 170 KB pack, no remote.
+Done: `git clone --no-local NanoApps tinygb; git filter-repo --path apps/tinygb --path-rename apps/tinygb/:` (18 commits, 43 files, 170 KB pack); `andrew867/tinygb` created public on GitHub and `main` pushed with the docs.
 
-Remaining tasks (need the go-ahead, because they are outward-facing):
-- Create `andrew867/tinygb` on GitHub (public), push `main`.
-- Nothing is removed from the NanoApps fork until Phase 2 proves the N31 build from the new repo.
+Nothing is removed from the NanoApps fork until Phase 2 proves the N31 build from the new repo.
 
-**Completion**: the GitHub repo exists with the extracted history and this `docs/` set.
+## Phase 1: Repo skeleton, host build, CI (done 2026-09-16, except CI green pending the push)
 
-## Phase 1: Repo skeleton, host build, CI
+**Goal**: `make test` and `make gate` pass from a fresh clone on Linux, CI runs them, and the RetailOS app builds through the real SDK.
 
-**Goal**: `make test` and `make gate` pass from a fresh clone on Linux, and CI runs them.
+Done:
+1. Root `Makefile`: the NanoApps app Makefile plus `test`, `gate`, `n31`, `check-seam`, `check-vendor`, `check-size`, `distclean`; guarded include so a clone without NanoApps still runs the host targets.
+2. `tg_palette.c` linked into the host tests; `test_palette` (count, lookup, clamp, light-to-dark order) and `test_scale_alpha` (the scaler keeps the palette's top byte, which RetailOS needs at 0xFF; `tg_scaler_init` no longer masks it).
+3. `make check-seam` (`nm -u` over every host object but `tg_peanut.o`/`minigb_apu.o`) and `make check-vendor` (SHA-256 against `vendor/LICENSES.md`).
+4. CI: a `host` job (tests, vendor, seam, fetch ROMs, gate, acid2 frame as an artifact) and a `retailos` job that checks this repository out as `NanoApps/apps/tinygb` and runs `make all check-size` with `arm-none-eabi-gcc`.
+5. `vendor/LICENSES.md` with copyright lines, upstream URLs, hashes, and the inherited mapper limits.
+6. `tinygb.c` replaced by the smallest raw-surface app that links (paints the surface, idle heartbeat), so NanoApps' build of every app no longer fails on TinyGB. 676-byte `.hbapp`.
+7. `.gitattributes` (`eol=lf`) so Windows clones do not hand CRLF to bash.
 
-Files: `Makefile` (new; targets `host`, `test`, `gate`, `n31`, `retailos`, `clean`, dispatching to `host/Makefile.host`, `linux/Makefile.n31`, `retailos/Makefile`), `.github/workflows/ci.yml`, `README.md`, `LICENSE`, `vendor/LICENSES.md`, `.gitignore` (add `out/`, `build*/`, `testroms/`, `*.sav`, `*.st0`).
+Found: `hb_app.mk` restates the arch flags at link, so OQ-008's `-mcpu=cortex-a5 -mfpu=vfpv4` is inert until Phase 3's `HB_ARCH_FLAGS` change; `-O2` applies.
 
-Tasks:
-1. Move `Makefile`, `Info.plist`, `tinygb.c` to `retailos/` (git mv).
-2. Add `tg_palette.c` to the host test link and a test for `tg_palette_index` and the clamp (it was never linked).
-3. Add the `nm`-based check that no `gb_*` symbol is referenced outside `tg_peanut.o` (AC-CORE-004) as a `make check-seam` target.
-4. CI: fetch test ROMs (they are downloads, not committed), build host, run tests and gate, upload `dmg-acid2.ppm` as an artifact. Cache nothing.
-5. Write `vendor/LICENSES.md` naming Peanut-GB and minigb_apu, their copyright lines, and that no local changes exist.
-
-**Completion**: CI green on the first push; `make gate` prints `pass 3 fail 0 skip 0`.
+**Completion**: CI green; `make gate` prints `pass 3 fail 0 skip 0`.
 
 ## Phase 2: N31 parity from the new repo
 
@@ -81,10 +79,10 @@ Tasks:
 
 **Goal**: a cartridge runs on RetailOS with the right picture and playable controls, silent.
 
-Files: `retailos/tinygb.c` (rewrite), `retailos/Makefile`, `retailos/Info.plist`, `platform/tg_input_hb.c`, `platform/tg_fs_hb.c`, `platform/tg_sys_hb.c`, `platform/retailos/include/time.h`, `platform/tg_pad.c` (decouple from `tg_fb`: take pixels + stride), `platform/tg_tilt.c` (drop `snprintf`), `platform/tg_text.c` (new), NanoApps fork `apps/tinygb/{Makefile,Info.plist,README.md}` (forwarder).
+Files: `tinygb.c` (rewrite), `Makefile` (SRCS), `Info.plist`, `platform/tg_input_hb.c`, `platform/tg_fs_hb.c`, `platform/tg_sys_hb.c`, `platform/retailos/include/time.h`, `platform/tg_pad.c` (decouple from `tg_fb`: take pixels + stride), `platform/tg_tilt.c` (drop `snprintf`), `platform/tg_text.c` (new), NanoApps fork `sdk/hb_app.mk` (`HB_ARCH_FLAGS`), NanoApps fork `apps/tinygb` (subtree).
 
 Tasks:
-1. Forwarder in NanoApps (`RETAILOS-INTEGRATION.md`), so `./start build tinygb` invokes `make -C $TINYGB/retailos NANOAPPS=...` and copies the `.hbapp` to `apps/tinygb/build/`.
+1. In the NanoApps fork: replace `apps/tinygb` with the subtree (`git rm -r apps/tinygb`, then `git subtree add --prefix=apps/tinygb ... --squash`), and add `HB_ARCH_FLAGS ?= -mcpu=cortex-a8 -mthumb -mfpu=neon` to `hb_app.mk`, used in `CFLAGS`, `LIBGCC`, and `RELOC_LDFLAGS` (default unchanged, no other app moves). Confirm `./start build tinygb` works.
 2. Freestanding pass: compile `core/` + portable `platform/` with the SDK flags; fix `snprintf`, `time.h`, `abort`; confirm `memmove` is not emitted or include the shim.
 3. `hb_raw_init` paints, makes `/Apps/Data/TinyGB/roms`, scans, shows the list with `tg_text`; a tapped row reads the ROM into the 1 MiB window and starts it (audio rate 0 for now).
 4. `hb_raw_frame`: one frame per tick, scale into `hb_raw_fb()` at y = 0, pad drawn below, inputs from `tg_input_hb`.
@@ -132,7 +130,7 @@ Tasks:
 2. Ten-launch leak test (AC-ROS-007); one-hour soak on each target.
 3. Update `README.md` with screenshots pulled from the device; `CHANGELOG.md` 0.1.0.
 4. Tag `v0.1.0`; N31 release zip picks up the new binary (no change needed); NanoApps fork README lists TinyGB with a link to this repo.
-5. Remove the last copies of the emulator source from the NanoApps fork, leaving the forwarder.
+5. `git subtree pull` the tag into the fork's `apps/tinygb`; open the pull request against `nfzerox/NanoApps` (OQ-014).
 
 **Completion**: `QA-CHECKLIST.md` fully ticked.
 
@@ -146,7 +144,7 @@ Tasks:
 |---|---|---|
 | Layout | keep the flat `platform/` with `_linux` / `_hb` suffixes; add `retailos/` and `linux/shim/` | least churn; the suffix convention already exists; git keeps history through renames |
 | Launcher shims | vendor with provenance + sync script | the new repo must build without NanoApps; the files are the user's own and change rarely |
-| NanoApps coupling | one forwarder dir in the fork | keeps `./start`, `build_apps.py`, and `mkrelocapp.py` untouched |
+| NanoApps coupling | this repository's root is the app directory; NanoApps carries it as `apps/tinygb` by `git subtree` | keeps `./start`, `build_apps.py`, and `mkrelocapp.py` untouched, and anyone who clones NanoApps can build it (OQ-014) |
 | ROM storage on RetailOS | static 1 MiB `.bss` window | free on disk, no leak, no allocator that can fail after launch; measured before fixed |
 | Audio sink | own slot queue, not Entrain's module | opposite clock master, tenth of the latency, no 1 s fade |
 | Text on RetailOS | own 6 x 8 bitmap font | raw surface has no text; ~760 bytes |

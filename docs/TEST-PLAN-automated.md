@@ -10,7 +10,7 @@ Map every requirement that can be checked without a device to a test that runs o
 - `make test` builds and runs the unit tests (seconds). `make gate` fetches the test ROMs if missing and runs `tools/gate.sh` (Blargg cpu_instrs, instr_timing, dmg-acid2; a few seconds at `-O2`).
 - Test ROMs are downloaded by `tools/fetch-testroms.sh`, never committed. CI fetches them each run; a fetch failure is a CI failure, not a skip.
 - Device-facing modules get a **fake platform**: `host/fake_hb.c` implements the handful of `hb_*` functions `tg_fs_hb.c`, `tg_input_hb.c`, and `tg_audio_hb.c` call (an in-memory filesystem, a scripted finger table and button levels, a scripted descriptor `+0x64` writer), so the RetailOS platform files compile and run on the host with `-DTG_FAKE_HB`.
-- CI is GitHub Actions on `ubuntu-latest`: build host, unit tests, gate, seam check, and a cross-compile smoke of the RetailOS objects with `arm-none-eabi-gcc` and the SDK's flags (no link; that needs a NanoApps checkout, which CI can clone at a pinned commit in a later iteration).
+- CI is GitHub Actions on `ubuntu-latest`, two jobs: `host` (build, unit tests, vendor hashes, seam check, fetch test ROMs, gate, acid2 frame as an artifact) and `retailos` (clones `andrew867/NanoApps`, checks this repository out as its `apps/tinygb`, builds the `.hbapp` with `arm-none-eabi-gcc`, runs `check-size`).
 
 ## Unit tests (`make test`)
 
@@ -49,7 +49,7 @@ Map every requirement that can be checked without a device to a test that runs o
 | ID | Check | Where |
 |---|---|---|
 | AUTO-BUILD-001 | `make check-seam`: `nm` over every non-core object finds no `gb_*` or `audio_*` Peanut symbol | Phase 1; AC-CORE-004 |
-| AUTO-BUILD-002 | RetailOS object compile of `core/` + portable `platform/` + `_hb` files with the SDK's exact flags and `-Werror=implicit-function-declaration`; proves the freestanding pass | Phase 3; REQ-ROS-050 |
+| AUTO-BUILD-002 | The CI `retailos` job: this repository checked out as `NanoApps/apps/tinygb`, `make all check-size` with `arm-none-eabi-gcc`; a link failure at `mkrelocapp.py` is how a stray libc call shows up. Runs on every push since Phase 1; grows with `SRCS` in Phase 3 | Phase 1; REQ-ROS-050, -070 |
 | AUTO-BUILD-003 | `.hbapp` size printed and asserted under 512 KiB | Phase 3; REQ-ROS-072 |
 | AUTO-BUILD-004 | N31 `check-built`: FP arch, no VFP-args tag, no NEEDED | existing; REQ-N31-050 |
 | AUTO-BUILD-005 | `grep -rn NanoApps` in the repo finds only provenance and the `NANOAPPS ?=` variables | Phase 2; AC-N31-005 |

@@ -1,75 +1,75 @@
 # RetailOS Integration
 
-How the RetailOS (NanoApps) build of TinyGB is produced from this repository and installed with NanoApps' own tooling, without changing that tooling.
+How the RetailOS (NanoApps) build of TinyGB is produced, and how NanoApps carries it so that anyone who clones NanoApps can build and install it with the tooling NanoApps already has. Nothing in NanoApps' `start`, `build_apps.py`, `mkrelocapp.py`, or `hb_app.mk` needs to change for this to work.
 
-## What NanoApps expects
+## The model: this repository is the app directory
 
-`./start` and `tools/build_apps.py` discover an app as `apps/<name>/` containing a `Makefile` (so `start` treats it as a target), `Info.plist` (identity, icon), and after a build `build/<name>.hbapp`. `sdk/hb_app.mk` locates the SDK from its own path (`SDK_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))`), so it can be included from any directory.
+NanoApps discovers an app as `apps/<name>/` containing a `Makefile` (so `start` treats it as a target), `Info.plist` (identity, icon), and after a build `build/<name>.hbapp`. `sdk/hb_app.mk` finds the SDK from its own path, so it can be included from anywhere.
 
-## The forwarder in the NanoApps fork
+So the root of this repository is a NanoApps app directory: `Makefile`, `Info.plist`, `tinygb.c`, and the source tree beside them. NanoApps carries the whole repository as `apps/tinygb` with `git subtree`:
 
-`NanoApps/apps/tinygb/` keeps three files and nothing else:
+```sh
+# in the NanoApps fork, once
+git subtree add --prefix=apps/tinygb https://github.com/andrew867/tinygb main --squash
 
-`Makefile`:
+# after TinyGB moves on
+git subtree pull --prefix=apps/tinygb https://github.com/andrew867/tinygb main --squash
 
-```make
-# TinyGB lives in its own repository. This forwards NanoApps' build to it and
-# copies the result to where build_apps.py looks. TINYGB points at the checkout.
-TINYGB ?= ../../../tinygb
-NANOAPPS := $(abspath ../..)
-
-.PHONY: all clean
-all:
-	@$(MAKE) -s -C $(TINYGB)/retailos NANOAPPS=$(NANOAPPS)
-	@mkdir -p build
-	@cp -f $(TINYGB)/retailos/build/tinygb.hbapp build/tinygb.hbapp
-
-clean:
-	@$(MAKE) -s -C $(TINYGB)/retailos clean
-	@rm -rf build
+# a fix made inside NanoApps/apps/tinygb, sent back here
+git subtree push --prefix=apps/tinygb https://github.com/andrew867/tinygb main
 ```
 
-`Info.plist`: a copy of `retailos/Info.plist` (the packer reads it from the NanoApps side; keep the two identical, and the forwarder's `all` can `cp` it too).
+`--squash` keeps NanoApps' history to one commit per pull rather than replaying TinyGB's. This repository stays the canonical source; NanoApps is a consumer. When TinyGB is submitted upstream to `nfzerox/NanoApps` the same subtree goes into the pull request, and upstream users get a buildable `apps/tinygb` with no second clone.
 
-`README.md`: two lines pointing at this repository.
+With that in place, from a NanoApps checkout:
 
-With that, `./start build tinygb`, `./start install tinygb`, and `make -C apps tinygb` work as they do for every other app, and `./start install` (everything) includes TinyGB.
+```sh
+./start build tinygb         # builds apps/tinygb/build/tinygb.hbapp
+./start install tinygb       # builds, packs, installs, icon on the Home Screen
+./start install              # everything, TinyGB included
+```
 
-## `retailos/Makefile` in this repository
+The extra files a subtree brings along (`docs/`, `host/`, `linux/`, `vendor/`) are inert inside NanoApps; `apps/Makefile` only cares that `apps/tinygb/Makefile` exists and builds.
+
+## The root `Makefile`
 
 ```make
+NANOAPPS    ?= ../..                  # right when this is apps/tinygb; a standalone clone sets it
 APP_NAME    := tinygb
-NANOAPPS   ?= ../../NanoApps
-SRCS       := tinygb.c \
-              ../core/tg_core.c ../core/tg_peanut.c ../vendor/minigb_apu.c \
-              ../platform/tg_scale.c ../platform/tg_audio_clock.c ../platform/tg_tilt.c \
-              ../platform/tg_palette.c ../platform/tg_pad.c ../platform/tg_text.c \
-              ../platform/tg_settings.c ../platform/tg_build.c \
-              ../platform/tg_audio_hb.c ../platform/tg_input_hb.c ../platform/tg_fs_hb.c \
-              ../platform/tg_sys_hb.c ../ui/tg_menu_raw.c
+SRCS        := tinygb.c ...           # core, portable platform, RetailOS platform, UI (Phase 3+)
 RAW_SURFACE := 1
-# Consumed by a := inside hb_app.mk, so it has to be set before the include.
-EXTRA_CFLAGS := -O2 -DAUDIO_SAMPLE_RATE=22050 -DMINIGB_APU_AUDIO_FORMAT_S16SYS=1 \
-                -I../platform/retailos/include \
-                -Wno-sign-compare -Wno-implicit-fallthrough -Wno-unused-but-set-variable -Wno-type-limits \
-                -DEN_BUILD_STAMP='"$(shell date -u +%Y%m%d.%H%M)"' -DEN_BUILD_GIT='"$(shell git rev-parse --short=7 HEAD)"'
-include $(NANOAPPS)/sdk/hb_app.mk
+EXTRA_CFLAGS := -O2 -mcpu=cortex-a5 -mfpu=vfpv4 -DAUDIO_SAMPLE_RATE=22050 \
+                -DMINIGB_APU_AUDIO_FORMAT_S16SYS=1 <vendor warning suppressions>
+include $(NANOAPPS)/sdk/hb_app.mk     # guarded: a clone with no NanoApps gets a message, not a parse error
+.DEFAULT_GOAL := all
 ```
 
-Plus a post-link size check (`stat -c%s build/tinygb.hbapp`, fail over 524288) appended after the include as an extra prerequisite of `all`. Whether `-mcpu=cortex-a5 -mfpu=vfpv4` is added is OQ-008.
+Plus `test`, `gate`, `n31`, `check-seam`, `check-vendor`, `check-size`, `distclean`. `EXTRA_CFLAGS` must be complete before the include because `hb_app.mk` folds it into `CFLAGS` with `:=`.
 
-Note the single `gcc` invocation in `hb_app.mk`: there are no per-object rules, so the vendor warning suppressions apply to everything; that is accepted on this target.
+Two facts about `hb_app.mk` worth knowing:
+
+- It compiles and links every source in one `gcc` invocation, so there are no per-object flags; the vendor warning suppressions apply to everything.
+- Its link flags restate `-mcpu=cortex-a8 -mthumb -mfpu=neon` after `EXTRA_CFLAGS`, so the arch override is inert today (OQ-008). `-O2` does apply.
+
+Standalone, with NanoApps checked out beside this repository:
+
+```sh
+make NANOAPPS=../NanoApps            # build/tinygb.hbapp
+make check-size NANOAPPS=../NanoApps
+```
+
+CI does exactly the subtree shape: it checks out `andrew867/NanoApps` and this repository into `NanoApps/apps/tinygb`, then runs `make all check-size` there.
 
 ## Data on the device
 
-`/Apps/Data/TinyGB/roms/` holds cartridges. NanoApps' `./start install --demo-data` copies `data/<Name>/` from the NanoApps tree; TinyGB ships no cartridges, so the folder is created by the app on first launch and populated by the owner in disk mode. `NanoApps/data/TinyGB/roms/README.txt` (one line: put your cartridges here) can be added to the fork so the demo-data copy makes the folder visible.
+`/Apps/Data/TinyGB/roms/` holds cartridges. The app creates the folder on first launch and says so on screen when it is empty. TinyGB ships no cartridges; the owner copies theirs in disk mode. A `data/TinyGB/roms/README.txt` in NanoApps (one line) can make the folder appear through `./start install --demo-data`.
 
 ## Debugging
 
 - `./start trace` prints the DRAM trace ring: TinyGB logs `INIT`, heap headroom, cartridge start, sink start/stop, and every refused file.
 - Home triple-click takes a screenshot through the resident; `./start pull media` fetches it. This is how AC-ROS-001 is checked.
-- A device that hangs on launch is almost always a `.hbapp` over the ceiling or an arena that did not fit: check the printed size and the last trace entries.
+- A device that hangs on launch is almost always a `.hbapp` over the ceiling or an arena that did not fit: check `make check-size` and the last trace entries.
 
-## Verification of the integration
+## Verification
 
-`./start build tinygb` from the fork produces `apps/tinygb/build/tinygb.hbapp`; `./start install tinygb` puts the icon on the Home Screen with the gamepad glyph and green colour; MAN-SMOKE-001.
+`./start build tinygb` from a NanoApps checkout with the subtree produces `apps/tinygb/build/tinygb.hbapp`; `./start install tinygb` puts the icon on the Home Screen; MAN-SMOKE-001. The CI `retailos` job proves the build shape on every push.

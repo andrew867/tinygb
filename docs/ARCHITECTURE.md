@@ -36,7 +36,7 @@ flowchart TD
         SHIM["n31/shim/<br/>drmfb, fbcon, touch, build_stamp<br/>(vendored from NanoApps)"]
     end
 
-    subgraph ros["retailos/ (NanoApps raw surface)"]
+    subgraph ros["RetailOS (NanoApps raw surface): tinygb.c at the root + platform/*_hb.c"]
         RMAIN["tinygb.c<br/>hb_raw_init / hb_raw_frame"]
         RAUD["tg_audio_hb.c<br/>chained SFX descriptors @ 22050"]
         RIN["tg_input_hb.c<br/>hb_touch multi, hb_button, hb_accel"]
@@ -96,7 +96,7 @@ Everything a player cares about sits beside the cartridge, in the format every o
 - `vendor/peanut_gb.h` (MIT, Mahyar Koshkouei, late-2023 line) and `vendor/minigb_apu.c` (MIT). Unmodified; adaptations live in `core/tg_peanut.c` and the build flags.
 - Test ROMs (Blargg, dmg-acid2) are fetched by `tools/fetch-testroms.sh`, never committed.
 - N31: the musl cross toolchain, static alsa-lib and libdrm from `C:\src\ipod\artifacts\linux-n31`, and LVGL (pinned checkout, compiled from a native mirror).
-- RetailOS: a NanoApps checkout for `sdk/hb_app.mk`, `tools/mkrelocapp.py`, and `start`. Located by `NANOAPPS`, default `../NanoApps`. See `RETAILOS-INTEGRATION.md`.
+- RetailOS: a NanoApps tree for `sdk/hb_app.mk`, `tools/mkrelocapp.py`, and `start`. Located by `NANOAPPS`, default `../..`, which is right when NanoApps carries this repository as `apps/tinygb` (a git subtree). See `RETAILOS-INTEGRATION.md`.
 
 ## Failure modes worth designing for
 
@@ -114,4 +114,4 @@ Everything a player cares about sits beside the cartridge, in the format every o
 ## Deployment shape
 
 - N31: one static ELF copied to `artifacts/linux-n31/tinygb`, installed to the disk volume beside `roms/` by `install-n31os-disk.ps1`, packaged by `mk-release-zip.sh`. See `N31-INTEGRATION.md`.
-- RetailOS: one `.hbapp` produced by `retailos/Makefile`, surfaced to NanoApps through a forwarder `apps/tinygb/` so `./start install tinygb` works unchanged. See `RETAILOS-INTEGRATION.md`.
+- RetailOS: one `.hbapp` produced by the root `Makefile`. NanoApps carries this repository as `apps/tinygb` (git subtree), so `./start install tinygb` works unchanged for anyone who clones NanoApps. See `RETAILOS-INTEGRATION.md`.

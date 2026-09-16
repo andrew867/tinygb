@@ -13,6 +13,7 @@
 
 #include "../core/tg_core.h"
 #include "../platform/tg_audio.h"
+#include "../platform/tg_palette.h"
 #include "../platform/tg_scale.h"
 #include "../platform/tg_tilt.h"
 
@@ -645,6 +646,74 @@ static void test_tilt(void)
     ok("a zero range presses nothing", tg_tilt_feed(&t, 999, 999, 999) == 0);
 }
 
+/* ---- the palettes ------------------------------------------------------- */
+
+static void test_palette(void)
+{
+    printf("palettes:\n");
+
+    ok("there are five",                  tg_palette_count() == 5);
+    ok("DMG is the default",              strcmp(tg_palette_at(0)->name, "DMG") == 0);
+    ok("DMG is the panel's green",        tg_palette_at(0)->shade[0] == 0x9BBC0Fu &&
+                                          tg_palette_at(0)->shade[3] == 0x0F380Fu);
+    ok("found by name",                   tg_palette_index("Ink") == 4);
+    ok("an unknown name is the default",  tg_palette_index("Sepia") == 0);
+    ok("NULL is the default",             tg_palette_index(NULL) == 0);
+    ok("out of range clamps to default",  tg_palette_at(99) == tg_palette_at(0));
+
+    /* Lightest first is the order the shade index means, and a palette that
+       got it backwards would draw every game as a negative. */
+    for (unsigned i = 0; i < tg_palette_count(); i++) {
+        const uint32_t *s = tg_palette_at(i)->shade;
+        unsigned l0 = (s[0] & 0xFF) + ((s[0] >> 8) & 0xFF) + ((s[0] >> 16) & 0xFF);
+        unsigned l3 = (s[3] & 0xFF) + ((s[3] >> 8) & 0xFF) + ((s[3] >> 16) & 0xFF);
+        char what[64];
+        snprintf(what, sizeof what, "%s runs light to dark", tg_palette_at(i)->name);
+        ok(what, l0 > l3);
+    }
+}
+
+/* ---- the top byte, for a compositor that reads it ----------------------- */
+
+static void test_scale_alpha(void)
+{
+    static tg_scaler s;
+    static uint32_t dst[TG_SCALED_W * TG_SCALED_H];
+    static uint8_t src[TG_W * TG_H];
+    uint32_t pal[4] = { 0xFF9BBC0Fu, 0xFF8BAC0Fu, 0xFF306230u, 0xFF0F380Fu };
+    unsigned bad = 0;
+
+    printf("scaler alpha:\n");
+
+    /* Every shade and every pair of shades, so every table entry is used. */
+    for (unsigned i = 0; i < sizeof src; i++)
+        src[i] = (uint8_t)((i * 7 + i / TG_W) & 3);
+
+    tg_scaler_init(&s, pal, true);
+    tg_scale_15(&s, dst, TG_SCALED_W, src);
+    for (unsigned i = 0; i < TG_SCALED_W * TG_SCALED_H; i++)
+        if ((dst[i] >> 24) != 0xFFu) bad++;
+    ok("smooth: every pixel keeps the palette's top byte", bad == 0);
+
+    bad = 0;
+    tg_scaler_init(&s, pal, false);
+    tg_scale_15(&s, dst, TG_SCALED_W, src);
+    for (unsigned i = 0; i < TG_SCALED_W * TG_SCALED_H; i++)
+        if ((dst[i] >> 24) != 0xFFu) bad++;
+    ok("sharp: every pixel keeps the palette's top byte", bad == 0);
+
+    /* And a palette without one gets none: N31 hands over 0x00RRGGBB and
+       the picture it captures back must still match the host byte for byte. */
+    pal[0] &= 0x00FFFFFFu; pal[1] &= 0x00FFFFFFu;
+    pal[2] &= 0x00FFFFFFu; pal[3] &= 0x00FFFFFFu;
+    bad = 0;
+    tg_scaler_init(&s, pal, true);
+    tg_scale_15(&s, dst, TG_SCALED_W, src);
+    for (unsigned i = 0; i < TG_SCALED_W * TG_SCALED_H; i++)
+        if ((dst[i] >> 24) != 0) bad++;
+    ok("a palette without one adds none", bad == 0);
+}
+
 int main(void)
 {
     test_header();
@@ -652,8 +721,10 @@ int main(void)
     test_run();
     test_state();
     test_scale();
+    test_scale_alpha();
     test_audio_clock();
     test_tilt();
+    test_palette();
 
     printf(fails ? "\n%d FAILED\n" : "\nall passed\n", fails);
     return fails != 0;

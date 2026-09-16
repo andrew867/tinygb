@@ -36,8 +36,16 @@ void tg_scaler_init(tg_scaler *s, const uint32_t pal[4], bool smooth)
 {
     tg_scaler_invalidate(s);
 
+    /*
+     * The top byte is kept, not masked. On N31 it is the X of XRGB8888 and
+     * nobody reads it; on RetailOS the compositor wants 0xFF there, and the
+     * cheapest place to put it is in the four palette entries, once, rather
+     * than on every pixel of every frame. mix() preserves it either way: two
+     * equal top bytes come through (x & y) untouched, and the 0xFEFEFE mask
+     * keeps the halved channel bits out of it.
+     */
     for (unsigned i = 0; i < 4; i++)
-        s->solid[i] = pal[i] & 0x00FFFFFFu;
+        s->solid[i] = pal[i];
 
     for (unsigned a = 0; a < 4; a++)
         for (unsigned b = 0; b < 4; b++)
