@@ -6,9 +6,11 @@ Neither upstream file carries a version number. The identity of the vendored cop
 
 | File | Licence | Copyright | Upstream | SHA-256 |
 |---|---|---|---|---|
-| `peanut_gb.h` | MIT | 2018-2023 Mahyar Koshkouei; parts from SameBoy, MIT, 2015-2019 Lior Halphon | https://github.com/deltabeard/Peanut-GB | `d4d64436c2e45075b3b60f44910fc9e7e824f2167e94503c775e6130e03f4196` |
-| `minigb_apu.c` | MIT | 2019 Mahyar Koshkouei; 2017 Alex Baines (MiniGBS) | https://github.com/deltabeard/minigb_apu | `0e9e18cadc3fb0daf26fa985c3b3b49232bcf09d2909aeb1c4711c07b2800e53` |
-| `minigb_apu.h` | MIT (the header refers to a LICENSE file that is not vendored; the `.c` states MIT in full) | as above | as above | `454707a08762191f8a3bd44d5b4e64f250cb43fc9cfb5b6fa0d5c4773a7ad1ab` |
+| `peanut_gb.h` | MIT | 2018-2023 Mahyar Koshkouei; parts from SameBoy, MIT, 2015-2019 Lior Halphon | https://github.com/deltabeard/Peanut-GB | `44d737081fd00d2be912ae193700c5501b40d25e789fa636ec9d841b403aa2c8` |
+| `minigb_apu.c` | MIT | 2019 Mahyar Koshkouei; 2017 Alex Baines (MiniGBS) | https://github.com/deltabeard/minigb_apu | `cd173eb5979f1210de6eff6b75e76445db09643494f1cf471df43c5f223ec1f2` |
+| `minigb_apu.h` | MIT (the header refers to a LICENSE file that is not vendored; the `.c` states MIT in full) | as above | as above | `60d3c838f55653804d66f51d27a33cf14518498a68d1e0506625c67ca061fad1` |
+
+Hashes are of the files as committed (LF line endings; `.gitattributes` normalises them), which is also what a Linux checkout sees. A Windows checkout made before `.gitattributes` existed hashed differently, which is how the first recorded values were wrong.
 
 The MIT text for both is the same as this repository's `LICENSE`, with the copyright lines above.
 
