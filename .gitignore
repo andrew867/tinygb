@@ -2,3 +2,11 @@ build/
 host/build/
 host/build-n31/
 testroms/
+
+out/
+build-*/
+*.sav
+*.st0
+*.ppm
+*.raw
+*.wav
