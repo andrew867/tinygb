@@ -49,12 +49,14 @@ for p in "${pairs[@]}"; do
   dst="$shim/${p%%:*}"
   src="$NANOAPPS/${p#*:}"
   if [[ ! -f "$src" ]]; then echo "MISSING in NanoApps: ${p#*:}" >&2; drift=1; continue; fi
-  if cmp -s "$src" "$dst"; then
+  # Line endings are not drift: this repository pins LF, and a NanoApps
+  # checkout made on Windows can carry CRLF on the same bytes.
+  if cmp -s <(tr -d '\r' < "$src") <(tr -d '\r' < "$dst"); then
     echo "  same     ${p%%:*}"
   else
     drift=1
-    if (( apply )); then cp "$src" "$dst"; echo "  updated  ${p%%:*}  <- ${p#*:}"
-    else echo "  DIFFERS  ${p%%:*}  <- ${p#*:}"; diff -u "$dst" "$src" | sed 's/^/           /' | head -n 40; fi
+    if (( apply )); then tr -d '\r' < "$src" > "$dst"; echo "  updated  ${p%%:*}  <- ${p#*:}"
+    else echo "  DIFFERS  ${p%%:*}  <- ${p#*:}"; diff -u --strip-trailing-cr "$dst" "$src" | sed 's/^/           /' | head -n 40; fi
   fi
 done
 
